@@ -6,7 +6,7 @@ import socket, threading
 import queue
 import numpy as np
 
-from Messages import *
+from Message import *
 from Node import *
 
 
@@ -76,8 +76,8 @@ class TrainingServer():
         self.processes = self.launch_processes()
 
     #Method for logging the successful results
-    def log_result(self, source, instance, value, status):
-        self.accepted_results_q.put((source, instance, value, status))
+    def log_result(self, source):
+        self.accepted_results_q.put((source))
 
     #Method for logging the failed results
     def log_failure(self, source, value, status):
@@ -143,7 +143,9 @@ class ClientThread(threading.Thread):
             msg = data.decode()
             if msg=='bye' or msg == '':
                 break
-            
+            #Read the model and weights file from the user
+            model_file, weights_file = msg.split(' ')
+
             #Read the data user provides
             (x_train, y_train), (x_test, y_test) = mnist.load_data()
             data_size = x_train.shape[0]
@@ -153,9 +155,11 @@ class ClientThread(threading.Thread):
                 start = i * (data_size / number_of_nodes)
                 end = (i + 1) * (data_size / number_of_nodes)
                 message = {"start": start, "end": end}
-                system.messenger.send(-1, i, TrainingMsg(None, start, end))
-                print("SENDING TO NODE", i, "START: ", start, "END: ", end)            
-        
+                system.messenger.send(-1, i, TrainingMsg(None, start, end, model_file, weights_file))
+                print("SENDING TO NODE", i, "START: ", start, "END: ", end, " MODEL FILE: ", model_file, " WEIGHTS FILE ", weights_file)            
+
+        print("ALL NODES JOINED...")
+
         print ("Client at ", self.clientAddress, " disconnected...")   
 
 import sys
