@@ -12,6 +12,12 @@ from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten
 from keras.layers import Conv2D, MaxPooling2D
 from keras import backend as K
+import os
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.models import model_from_json
+import numpy
+import os
 
 #Basic class for a node in system
 class Node:
@@ -69,9 +75,12 @@ class Node:
     #Method for training
     def train(self, msg):
 
-        import os
-        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
-        os.environ["CUDA_VISIBLE_DEVICES"] = self.pid
+
+        model_file = msg.model_file
+        weights_file = msg.weights_file
+
+        #os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
+        #os.environ["CUDA_VISIBLE_DEVICES"] = self.pid
 
 
         batch_size = 128
@@ -109,17 +118,13 @@ class Node:
         y_train = keras.utils.to_categorical(y_train, num_classes)
         y_test = keras.utils.to_categorical(y_test, num_classes)
 
-        model = Sequential()
-        model.add(Conv2D(32, kernel_size=(3, 3),
-                         activation='relu',
-                         input_shape=input_shape))
-        model.add(Conv2D(64, (3, 3), activation='relu'))
-        model.add(MaxPooling2D(pool_size=(2, 2)))
-        model.add(Dropout(0.25))
-        model.add(Flatten())
-        model.add(Dense(128, activation='relu'))
-        model.add(Dropout(0.5))
-        model.add(Dense(num_classes, activation='softmax'))
+        json_file = open(model_file, 'r')
+        model_json = json_file.read()
+        json_file.close()
+        model = model_from_json(model_json)
+        # load weights into new model
+        model.load_weights(weights_file)
+        print("Loaded model from disk")
 
         model.compile(loss=keras.losses.categorical_crossentropy,
                       optimizer=keras.optimizers.Adadelta(),
@@ -130,8 +135,16 @@ class Node:
                   epochs=epochs,
                   verbose=1,
                   validation_data=(x_test, y_test))
-        score = model.evaluate(x_test, y_test, verbose=0)
-        print('Test loss:', score[0])
-        print('Test accuracy:', score[1])
-            
-                
+        #score = model.evaluate(x_test, y_test, verbose=0)
+        #print('Test loss:', score[0])
+        #print('Test accuracy:', score[1])
+
+        #NOW SAVE THE NEW WEIGHTS
+        filename = weights_file + "_from_node_" + str(self.pid)
+        model.save_weights(filename)
+        print("Saved model to disk")
+
+        self.logged_values.append("Node {} completed training".format(self.pid))
+        self.system.log_result(self.pid)
+
+
