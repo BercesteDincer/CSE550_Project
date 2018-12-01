@@ -1,11 +1,3 @@
-##############################################
-#   Nicasia Beebe-Wang 1723387 nbbwang@uw.edu
-#   Ayse Berceste Dincer 1723315 abdincer@uw.edu
-#
-# Code for CSE 550 HW2
-# 
-# Code is modified from: https://github.com/gdub/python-paxos 
-##############################################
 
 import socket
 
