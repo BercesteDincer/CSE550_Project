@@ -5,12 +5,13 @@ class Message:
 
 #Message class for sending the request of the client to the PROPOSER
 class TrainingMsg(Message):
-    def __init__(self, source, start, end, model_file, weights_file):
+    def __init__(self, source, start, end, model_file, weights_file, input_file):
         super(TrainingMsg, self).__init__(source)
         self.start = start
         self.end = end
         self.model_file = model_file
         self.weights_file = weights_file
+        self.input_file = input_file
     def __str__(self):
         return "TRAIN MESSAGE = [Starting = {}, Ending = {}]".format(self.start, self.end)
 
