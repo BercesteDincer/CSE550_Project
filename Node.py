@@ -82,75 +82,92 @@ class Node:
     def train(self, msg):
 
 
-        from tensorflow.examples.tutorials.mnist import input_data
-        mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
+        model_file = msg.model_file
+        weights_file = msg.weights_file
 
-        # Parameters
-        learning_rate = 0.01
-        training_epochs = 1
-        batch_size = 100
-        display_step = 1
-
-        # Parameters
-        learning_rate = 0.01
-        training_epochs = 10
-        batch_size = 100
-        display_step = 1
-
-        # tf Graph Input
-        x = tf.placeholder(tf.float32, [None, 784]) # mnist data image of shape 28*28=784
-        y = tf.placeholder(tf.float32, [None, 10]) # 0-9 digits recognition => 10 classes
-
-        # Set model weights
-        W = tf.Variable(tf.zeros([784, 10]))
-        b = tf.Variable(tf.zeros([10]))
-
-        # Construct model
-        pred = tf.nn.softmax(tf.matmul(x, W) + b) # Softmax
-
-        # Minimize error using cross entropy
-        cost = tf.reduce_mean(-tf.reduce_sum(y*tf.log(pred), reduction_indices=1))
-
-        grad_W, grad_b = tf.gradients(xs=[W, b], ys=cost)
+        #os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
+        #os.environ["CUDA_VISIBLE_DEVICES"] = self.pid
 
 
-        new_W = W.assign(W - learning_rate * grad_W)
-        new_b = b.assign(b - learning_rate * grad_b)
+        batch_size = 128
+        num_classes = 10
+        epochs = 12
 
-        # Initialize the variables (i.e. assign their default value)
-        init = tf.global_variables_initializer()
+        img_rows, img_cols = 28, 28
 
-        # Start training
-        with tf.Session() as sess:
-            sess.run(init)
+        # the data, split between train and test sets
+        (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
-            # Training cycle
-            for epoch in range(training_epochs):
-                avg_cost = 0.
-                total_batch = int(mnist.train.num_examples/batch_size)
-                # Loop over all batches
-                for i in range(total_batch):
-                    batch_xs, batch_ys = mnist.train.next_batch(batch_size)
-                    # Fit training using batch data
-                    _, _,  c = sess.run([new_W, new_b ,cost], feed_dict={x: batch_xs,
-                                                               y: batch_ys})
-                    
-                    # Compute average loss
-                    avg_cost += c / total_batch
-                # Display logs per epoch step
-                if (epoch+1) % display_step == 0:
-        #             print(sess.run(W))
-                    print ("Epoch:", '%04d' % (epoch+1), "cost=", "{:.9f}".format(avg_cost))
+        x_train = x_train.reshape(60000, 784)
+        x_test = x_test.reshape(10000, 784)
+        x_train = x_train.astype('float32')
+        x_test = x_test.astype('float32')
+        x_train /= 255
+        x_test /= 255
+        print(x_train.shape[0], 'train samples')
+        print(x_test.shape[0], 'test samples')
 
-            print ("Optimization Finished!")
+        # convert class vectors to binary class matrices
+        y_train = keras.utils.to_categorical(y_train, num_classes)
+        y_test = keras.utils.to_categorical(y_test, num_classes)
 
-        # Test model
-        correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
-        # Calculate accuracy for 3000 examples
-        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-        print ("Accuracy:", accuracy.eval({x: mnist.test.images[:3000], y: mnist.test.labels[:3000]}))
+        start = int(msg.start)
+        end = int(msg.end)
+
+        #start = 0
+        #end = 5
+        x_train = x_train[start:end, :]
+        y_train = y_train[start:end]
+
+        json_file = open(model_file, 'r')
+        model_json = json_file.read()
+        json_file.close()
+        model = model_from_json(model_json)
+        # load weights into new model
+        model.load_weights(weights_file)
+        print("Loaded model from disk")
+
+        old_weights = model.get_weights()
+
+        model.compile(loss=keras.losses.categorical_crossentropy,
+                      optimizer=keras.optimizers.SGD(),
+                      metrics=['accuracy'])
+
+        model.fit(x_train, y_train,
+                  batch_size=batch_size,
+                  epochs=1,
+                  verbose=1,
+                 validation_data=(x_test, y_test))
+        score = model.evaluate(x_test, y_test, verbose=0)
+        print('Test loss:', score[0])
+        print('Test accuracy:', score[1])
+        new_weights = model.get_weights()
+
+        # other_model = model
+        # outputTensor = other_model.output 
+        # listOfVariableTensors = other_model.trainable_weights
+        # gradients = k.gradients(outputTensor, listOfVariableTensors)
+
+        # trainingExample = x_train
+        # sess = tf.InteractiveSession()
+        # sess.run(tf.initialize_all_variables())
+
+        # evaluated_gradients = sess.run(gradients,feed_dict={other_model.input:trainingExample})
+
+        # weights = [tensor for tensor in model.trainable_weights]
+        # optimizer = model.optimizer
+
+        # gradients = optimizer.get_gradients(model.total_loss, weights)
+
         
-        evaluated_gradients = [grad_W, grad_b]
+        #print("GRADIENTS", evaluated_gradients[0])
+       
+
+        evaluated_gradients = []
+        for i in range(len(new_weights)):
+            evaluated_gradients.append(old_weights[i] - new_weights[i])
+        print("EVALUATED GRADIENTS: ", len(evaluated_gradients))
+
         self.logged_values.append("Node {} completed training".format(self.pid))
         message = {"pid": self.pid, "gradients": evaluated_gradients}
         self.system.log_result(message)
