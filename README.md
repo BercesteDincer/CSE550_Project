@@ -7,5 +7,5 @@ python TrainingServer.py
 You can run the client in another terminal:
 python InteractiveClient.py
 
-Then you can pass a model file and a weights file, here is an example:
-mnist_model.json mnist_model.h5
+Then you can pass a model file and a weights file and dataset term, here is an example:
+mnist_model.json mnist_model.h5 mnist
