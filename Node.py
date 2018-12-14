@@ -16,8 +16,14 @@ import os
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.models import model_from_json
-import numpy
+import numpy 
+import numpy as np
 import os
+from keras import backend as k
+import tensorflow as tf
+
+import numpy as np
+import h5py
 
 #Basic class for a node in system
 class Node:
@@ -76,75 +82,79 @@ class Node:
     def train(self, msg):
 
 
-        model_file = msg.model_file
-        weights_file = msg.weights_file
+        from tensorflow.examples.tutorials.mnist import input_data
+        mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 
-        #os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
-        #os.environ["CUDA_VISIBLE_DEVICES"] = self.pid
+        # Parameters
+        learning_rate = 0.01
+        training_epochs = 1
+        batch_size = 100
+        display_step = 1
+
+        # Parameters
+        learning_rate = 0.01
+        training_epochs = 10
+        batch_size = 100
+        display_step = 1
+
+        # tf Graph Input
+        x = tf.placeholder(tf.float32, [None, 784]) # mnist data image of shape 28*28=784
+        y = tf.placeholder(tf.float32, [None, 10]) # 0-9 digits recognition => 10 classes
+
+        # Set model weights
+        W = tf.Variable(tf.zeros([784, 10]))
+        b = tf.Variable(tf.zeros([10]))
+
+        # Construct model
+        pred = tf.nn.softmax(tf.matmul(x, W) + b) # Softmax
+
+        # Minimize error using cross entropy
+        cost = tf.reduce_mean(-tf.reduce_sum(y*tf.log(pred), reduction_indices=1))
+
+        grad_W, grad_b = tf.gradients(xs=[W, b], ys=cost)
 
 
-        batch_size = 128
-        num_classes = 10
-        epochs = 12
+        new_W = W.assign(W - learning_rate * grad_W)
+        new_b = b.assign(b - learning_rate * grad_b)
 
-        img_rows, img_cols = 28, 28
+        # Initialize the variables (i.e. assign their default value)
+        init = tf.global_variables_initializer()
 
-        (x_train, y_train), (x_test, y_test) = mnist.load_data()
+        # Start training
+        with tf.Session() as sess:
+            sess.run(init)
 
-        if K.image_data_format() == 'channels_first':
-            x_train = x_train.reshape(x_train.shape[0], 1, img_rows, img_cols)
-            x_test = x_test.reshape(x_test.shape[0], 1, img_rows, img_cols)
-            input_shape = (1, img_rows, img_cols)
-        else:
-            x_train = x_train.reshape(x_train.shape[0], img_rows, img_cols, 1)
-            x_test = x_test.reshape(x_test.shape[0], img_rows, img_cols, 1)
-            input_shape = (img_rows, img_cols, 1)
+            # Training cycle
+            for epoch in range(training_epochs):
+                avg_cost = 0.
+                total_batch = int(mnist.train.num_examples/batch_size)
+                # Loop over all batches
+                for i in range(total_batch):
+                    batch_xs, batch_ys = mnist.train.next_batch(batch_size)
+                    # Fit training using batch data
+                    _, _,  c = sess.run([new_W, new_b ,cost], feed_dict={x: batch_xs,
+                                                               y: batch_ys})
+                    
+                    # Compute average loss
+                    avg_cost += c / total_batch
+                # Display logs per epoch step
+                if (epoch+1) % display_step == 0:
+        #             print(sess.run(W))
+                    print ("Epoch:", '%04d' % (epoch+1), "cost=", "{:.9f}".format(avg_cost))
 
-        x_train = x_train.astype('float32')
-        x_test = x_test.astype('float32')
-        x_train /= 255
-        x_test /= 255
-        print('x_train shape:', x_train.shape)
-        print(x_train.shape[0], 'train samples')
-        print(x_test.shape[0], 'test samples')
+            print ("Optimization Finished!")
 
-        start = int(msg.start)
-        end = int(msg.end)
-
-        x_train = x_train[start:end, :]
-        y_train = y_train[start:end]
-
-        # convert class vectors to binary class matrices
-        y_train = keras.utils.to_categorical(y_train, num_classes)
-        y_test = keras.utils.to_categorical(y_test, num_classes)
-
-        json_file = open(model_file, 'r')
-        model_json = json_file.read()
-        json_file.close()
-        model = model_from_json(model_json)
-        # load weights into new model
-        model.load_weights(weights_file)
-        print("Loaded model from disk")
-
-        model.compile(loss=keras.losses.categorical_crossentropy,
-                      optimizer=keras.optimizers.Adadelta(),
-                      metrics=['accuracy'])
-
-        model.fit(x_train, y_train,
-                  batch_size=batch_size,
-                  epochs=epochs,
-                  verbose=1,
-                  validation_data=(x_test, y_test))
-        #score = model.evaluate(x_test, y_test, verbose=0)
-        #print('Test loss:', score[0])
-        #print('Test accuracy:', score[1])
-
-        #NOW SAVE THE NEW WEIGHTS
-        filename = weights_file + "_from_node_" + str(self.pid)
-        model.save_weights(filename)
-        print("Saved model to disk")
-
+        # Test model
+        correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
+        # Calculate accuracy for 3000 examples
+        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        print ("Accuracy:", accuracy.eval({x: mnist.test.images[:3000], y: mnist.test.labels[:3000]}))
+        
+        evaluated_gradients = [grad_W, grad_b]
         self.logged_values.append("Node {} completed training".format(self.pid))
-        self.system.log_result(self.pid)
+        message = {"pid": self.pid, "gradients": evaluated_gradients}
+        self.system.log_result(message)
 
 
+            
+                
